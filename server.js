@@ -7,7 +7,11 @@ const { StreamChat } = require("stream-chat");
 
 const app = express();
 
-app.use(cors());
+const corsOptions =  {
+  origin: ['https://chat-server-hermes.herokuapp.com/messaging','http://localhost:3000']
+};
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
