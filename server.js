@@ -24,15 +24,23 @@ app.post('/messaging', async (req, res) => {
   var authName = req.body.combo.split(",")[1]
   var smsName = req.body.combo.split(",")[0]
 
-  client = new Client({
-       user: 'postgres',
-       host: 'localhost',
-       database: 'hermes',
-       password: 'a',
-       port: 5432,
-   });
-   client.connect()
+  // client = new Client({
+  //      user: 'postgres',
+  //      host: 'localhost',
+  //      database: 'hermes',
+  //      password: 'adidas123',
+  //      port: 5432,
+  //  });
+  //  client.connect()
 
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  client.connect()
+  
   const admin = { id: "admin" };
 
   //Add user to their company's groupchat
