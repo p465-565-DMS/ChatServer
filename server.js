@@ -8,7 +8,7 @@ const { StreamChat } = require("stream-chat");
 const app = express();
 
 const corsOptions =  {
-  origin: ['https://chat-server-hermes.herokuapp.com/messaging','http://localhost:3000']
+  origin: ['https://hermes-delivery-hub.herokuapp.com','http://localhost:3000']
 };
 
 app.use(cors(corsOptions));
