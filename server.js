@@ -7,11 +7,7 @@ const { StreamChat } = require("stream-chat");
 
 const app = express();
 
-const corsOptions =  {
-  origin: ['https://hermes-delivery-hub.herokuapp.com','http://localhost:3000']
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -26,61 +22,238 @@ app.post('/messaging', async (req, res) => {
 
   console.log("WE HIT THE BACKEND")
   var authName = req.body.combo.split(",")[1]
+  console.log("authname: ", authName);
   var smsName = req.body.combo.split(",")[0]
+  console.log("smsName: ", smsName);
 
-  // client = new Client({
-  //      user: 'postgres',
-  //      host: 'localhost',
-  //      database: 'hermes',
-  //      password: 'adidas123',
-  //      port: 5432,
-  //  });
-  //  client.connect()
+  pool = new Client({
+       user: 'postgres',
+       host: 'localhost',
+       database: 'hermes',
+       password: 'a',
+       port: 5432,
+   });
 
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-  client.connect()
-  
+
   const admin = { id: "admin" };
 
-  //Add user to their company's groupchat
-  await client.query("SELECT dd.companyname FROM DeliveryDriver dd, Users u WHERE u.userid = dd.userid AND u.username = '" + authName + "';", (err, result) => {
-    if(err){
-      console.log("Query errored out...")
-      console.log(err);
-    }
-    else if(result.rows[0] !== undefined){
-      var companyName = result.rows[0].companyname;
-      const channel = serverSideClient.channel("team", companyName, {
-        name: companyName,
-        created_by: admin
-      });
-      channel.create();
-      channel.addMembers([smsName]);
+  pool.connect();
+  //Add IF driver to their company's groupchat
+  await pool.query("SELECT DISTINCT dd.companyName FROM DeliveryDriver dd, Users u WHERE u.userid = dd.userid AND u.username = '" + authName + "';", (err, result) => {
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          var companyName = rest.companyname;
+          const channel = serverSideClient.channel("team", companyName, {
+            name: companyName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName]);
+        }
+        catch(error){
+          console.log("OOF")
+        }
+      }
     }
   });
-  //If they're an admin...
-  await client.query("SELECT DISTINCT da.companyname FROM DeliveryAdmin da, Users daUser WHERE da.userid = daUser.userid AND daUser.username = '" + authName + "';" ), (err, result) => {
-    console.log("DOES THIS EVER HIT?")
-    if(err){
-      console.log("Query errored out...")
-      console.log(err);
+  //Add IF admin to their company's groupchat
+  await pool.query("SELECT DISTINCT da.companyname FROM DeliveryAdmin da, Users u WHERE da.userid = u.userid AND u.username = '" + authName + "';", (err, result) => {
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          var companyName = rest.companyname;
+          const channel = serverSideClient.channel("team", companyName, {
+            name: companyName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName]);
+        }
+        catch(error){
+          console.log("OOF");
+        }
+      }
     }
-    else if (results.rows[0] !== undefined){
-      console.log("TEST")
-      console.log(results.rows[0])
-      const {members} = channel.queryMembers({'name':results.rows[0].companyname})
-      console.log(members);
-      // const channel = serverSideClient.channel("team", {
-      //   members: [smsName, result.rows[0].username],
-      // });
-      // channel.create();
+  });
+  //Creates Driver To Admins Chat
+  await pool.query("SELECT auser.email FROM DeliveryDriver dd, Users duser, DeliveryAdmin da, Users auser WHERE dd.userid = duser.userid AND da.userid = auser.userid AND dd.companyname = da.companyname AND duser.username = '" + authName + "';", (err, result) => {
+    //Driver_NAME__Admin_NAME
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+          const channelName = "Driver_" + smsName + "__" + "Manager_" + fixedName;
+
+          const channel = serverSideClient.channel("team", channelName, {
+            name: channelName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName, fixedName]);
+        }
+        catch(error){
+          console.log("OOF");
+        }
+      }
     }
-  }
+  });
+  //Creates Admins To Driver Chat
+  await pool.query("SELECT duser.email FROM DeliveryDriver dd, Users duser, DeliveryAdmin da, Users auser WHERE dd.userid = duser.userid AND da.userid = auser.userid AND dd.companyname = da.companyname AND auser.username = '" + authName + "';", (err, result) => {
+    //Driver_NAME__Admin_NAME
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+          const channelName = "Driver_" + fixedName + "__" + "Manager_" + smsName;
+
+          const channel = serverSideClient.channel("team", channelName, {
+            name: channelName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName, fixedName]);
+        }
+        catch(error){
+          console.log("OOF");
+        }
+      }
+    }
+  });
+  //Creates Customer To Admin Chat
+  await pool.query("SELECT manager.email FROM Package p, Users customer, Users manager, DeliveryAdmin da WHERE customer.userid = p.userid AND manager.userid = da.userid AND da.adminid = p.adminid AND customer.username = '" + authName + "';", (err, result) => {
+    console.log(result)
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+          const channelName = "Customer_" + smsName + "__" + "Manager_" + fixedName;
+
+          const channel = serverSideClient.channel("team", channelName, {
+            name: channelName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName, fixedName]);
+        }
+        catch(error){
+          console.log("OOF");
+        }
+      }
+    }
+  });
+  //Creates Admin To Customer Chat
+  await pool.query("SELECT customer.email FROM Package p, Users customer, Users manager, DeliveryAdmin da WHERE customer.userid = p.userid AND manager.userid = da.userid AND da.adminid = p.adminid AND manager.username = '" + authName + "';", (err, result) => {
+    console.log(result)
+    if(result !== undefined){
+      for(const rest of result.rows){
+        try{
+          const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+          const channelName = "Customer_" + fixedName + "__" + "Manager_" + smsName;
+
+          const channel = serverSideClient.channel("team", channelName, {
+            name: channelName,
+            created_by: admin
+          });
+          channel.create();
+          channel.addMembers([smsName, fixedName]);
+        }
+        catch(error){
+          console.log("OOF");
+        }
+      }
+    }
+  });
+
+  // await pool.query("SELECT DISTINCT da.companyname FROM DeliveryAdmin da, Users u WHERE da.userid = u.userid AND u.username = '" + authName + "';", (err, result) => {
+  //   try{
+  //     var companyName = result.rows[0].companyname;
+  //     const channel = serverSideClient.channel("team", companyName, {
+  //       name: companyName,
+  //       created_by: admin
+  //     });
+  //     channel.create();
+  //     channel.addMembers([smsName]);
+  //   }
+  //   catch(err){
+  //     console.log("User does not belong to a company in the admin table")
+  //   }
+  // });
+  //Add Admins To Driver Chat
+  //Add Customer To Admins Chat
+  //Add Admins To Customer Chat
+
+  //Connect driver to manager
+  // await pool.query("SELECT DISTINCT manager.email FROM DeliveryDriver dd, DeliveryAdmin da, Users emp, Users manager WHERE dd.companyname = da.companyname AND emp.userid = dd.userid AND manager.userid = da.userid AND emp.username = '" + authName + "';", (err, result) => {
+  //   for(const rest of result.rows){
+  //     const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+  //     console.log()
+  //     // try{
+  //       const dmName = "Manager-" + fixedName + '-x-' + "Driver" + smsName;
+  //       const channel = serverSideClient.channel("team", dmName, {
+  //         name: dmName,
+  //         created_by: admin
+  //       });
+  //       channel.create();
+  //       channel.addMembers([smsName, fixedName]);
+  //     // }
+  //     // catch(err){
+  //       // console.log(fixedName, " hasn't joined the chat yet...");
+  //     // }
+  //   }
+  // });
+
+
+  //Connect manager to driver
+  // await pool.query("SELECT DISTINCT emp.email FROM DeliveryDriver dd, DeliveryAdmin da, Users emp, Users manager WHERE dd.companyname = da.companyname AND emp.userid = dd.userid AND manager.userid = da.userid AND manager.username = '" + authName + "';", (err, result) => {
+  //   console.log(result.rows)
+  //   if(err){
+  //     console.log("Query errored out...")
+  //     console.log(err);
+  //   }
+  //   else if (result.rows[0] !== undefined){
+  //     console.log("Successful query!")
+  //     console.log("Printing results")
+  //     console.log("RESULTS: ", result.rows);
+  //     for(const rest of result.rows){
+  //       const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+  //
+  //       try{
+  //         const dmName = "Manager-" + smsName + '-x-' + "Driver-" + fixedName;
+  //         const channel = serverSideClient.channel("team", dmName, {
+  //           name: dmName,
+  //           created_by: admin
+  //         });
+  //         channel.create();
+  //         channel.addMembers([smsName, fixedName]);
+  //       }
+  //       catch(err){
+  //         console.log(fixedName, " hasn't joined the chat yet...");
+  //       }
+  //
+  //     }
+  //   }
+  // });
+
+  //Connect manager to customers
+  // await pool.query("SELECT DISTINCT duser.email FROM Package p, DeliveryAdmin dadmin, Users duser, Users customer WHERE p.adminid = dadmin.adminid AND dadmin.userid = duser.userid AND customer.userid = p.userid AND customer.username = '" + authName + "';", (err, result) => {
+  //   for(const rest of result.rows){
+  //     const fixedName = rest.email.replace(/([^a-z0-9_-]+)/gi, "_");
+  //     try{
+  //       const dmName = "Customer-" + smsName + '-x-' + "Manager-" + fixedName;
+  //       const channel = serverSideClient.channel("team", dmName, {
+  //         name: dmName,
+  //         created_by: admin
+  //       });
+  //       channel.create();
+  //       channel.addMembers([smsName, fixedName]);
+  //     }
+  //     catch(err){
+  //       console.log(fixedName, " hasn't joined the chat...")
+  //     }
+  //   }
+  // })
+
 });
 
 
